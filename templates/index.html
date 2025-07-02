@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Product Prices</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 30px auto;
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      display: flex;
+      gap: 20px;
+    }
+    main {
+      flex: 1;
+    }
+    aside#sidebar {
+      width: 250px;
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      overflow-y: auto;
+      max-height: 600px;
+    }
+    h2, h3 {
+      text-align: center;
+      color: #333;
+    }
+    form {
+      margin-top: 20px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      background-color: #28a745;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #218838;
+    }
+    .selected-items {
+      margin-top: 15px;
+      padding: 10px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      min-height: 40px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .selected-item {
+      background: #007bff;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-direction: column;
+      min-width: 555px;
+    }
+    .selected-item button {
+      background: transparent;
+      border: none;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0;
+      align-self: flex-end;
+    }
+    .price-info {
+      font-size: 12px;
+      margin-top: 3px;
+      color: #e0e0e0;
+    }
+    .price-info small {
+      font-size: 11px;
+      color: #c0c0c0;
+    }
+    #previousSelectedList {
+      list-style: none;
+      padding-left: 0;
+    }
+    #previousSelectedList li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding: 5px 8px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+    #previousSelectedList button {
+      font-size: 12px;
+      padding: 3px 8px;
+      background: #007bff;
+      border-radius: 5px;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #previousSelectedList button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h2>Your city: {{ city }}</h2>
+
+    <form method="post" id="productForm" autocomplete="off">
+      <input list="products" id="productInput" name="productInput" placeholder="Type product name" />
+      <datalist id="products">
+        {% for item in prices.keys() %}
+          <option value="{{ item }}"></option>
+        {% endfor %}
+      </datalist>
+
+      <div class="selected-items" id="selectedItems">
+        {% for item in selected_items %}
+          <div class="selected-item" data-name="{{ item }}">
+            {{ item.capitalize() }}
+            <button type="button" onclick="removeItem('{{ item }}')">&times;</button>
+            <input type="hidden" name="items" value="{{ item }}">
+            {% if prices_real and item in prices_real %}
+              {% set price, qty, unit = prices_real[item] %}
+              <div class="price-info">
+                Price: €{{ "%.2f"|format(price) }} for {{ qty }} {{ unit }}{% if qty != 1 %}s{% endif %}<br>
+                <small>(Base price per 1 {{ unit }})</small>
+              </div>
+            {% else %}
+              <div class="price-info">
+                Base Price: €{{ "%.2f"|format(prices[item]) }} per unit
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+
+      <button type="submit">Calculate Total</button>
+    </form>
+
+    {% if total is not none %}
+      <h3>Total: €{{ "%.2f"|format(total) }}</h3>
+    {% endif %}
+  </main>
+
+  <aside id="sidebar">
+    <h3>Products from Database</h3>
+    <ul id="previousSelectedList">
+      {% for product in all_products %}
+        <li>
+          {{ product.name.capitalize() }}
+          <button type="button"
+                  data-unit="{{ units[product.name] }}"
+                  onclick="addItemWithQuantityPrompt('{{ product.name }}', this.dataset.unit)">
+            Add {{ units[product.name] }}
+          </button>
+        </li>
+      {% endfor %}
+    </ul>
+  </aside>
+
+  <script>
+    const input = document.getElementById('productInput');
+    const selectedItemsContainer = document.getElementById('selectedItems');
+
+    function removeItem(itemName) {
+      const items = selectedItemsContainer.querySelectorAll('.selected-item');
+      items.forEach(div => {
+        if (div.getAttribute('data-name').toLowerCase() === itemName.toLowerCase()) {
+          div.remove();
+        }
+      });
+    }
+
+    function parseNameAndQuantity(name) {
+      const parts = name.trim().split(/\s+/);
+      const product = parts[0];
+      const qtyUnit = parts.slice(1).join(' ');
+      return { product, qtyUnit };
+    }
+
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const value = input.value.trim();
+        if (value && !isSelected(value)) {
+          addItem(value);
+          input.value = '';
+        }
+      }
+    });
+
+    function isSelected(name) {
+      const inputs = selectedItemsContainer.querySelectorAll('input[name="items"]');
+      for (const input of inputs) {
+        if (input.value.toLowerCase() === name.toLowerCase()) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function addItem(name) {
+      const { product, qtyUnit } = parseNameAndQuantity(name);
+      const displayName = product.charAt(0).toUpperCase() + product.slice(1);
+      const qtyText = qtyUnit ? ` — ${qtyUnit}` : '';
+
+      const div = document.createElement('div');
+      div.className = 'selected-item';
+      div.setAttribute('data-name', product.toLowerCase());
+      div.innerHTML = `
+        ${displayName}${qtyText}
+        <button type="button" onclick="removeItem('${product.toLowerCase()}')">&times;</button>
+        <input type="hidden" name="items" value="${name}">
+      `;
+      selectedItemsContainer.appendChild(div);
+    }
+
+    function addItemWithQuantityPrompt(name, unit) {
+      let qty = prompt(`Enter quantity for ${name} (${unit}):`, "1");
+      if (qty === null) return;
+
+      qty = qty.trim();
+      if (!qty || isNaN(qty) || Number(qty) <= 0) {
+        alert("Please enter a valid positive number for quantity.");
+        return;
+      }
+
+      const qtyNum = Number(qty);
+      const itemWithQty = `${name} ${qtyNum} ${unit}`;
+      if (!isSelected(itemWithQty)) {
+        addItem(itemWithQty);
+      }
+    }
+  </script>
+</body>
+</html>
