@@ -4,7 +4,7 @@ from services.pricing import get_base_price, get_price_from_tesco, calculate_tot
 from dotenv import load_dotenv
 from extensions import db  # подключаем SQLAlchemy
 from models.product import Product  # модель Product
-from utils.units import BASE_PRICES, units
+from utils.units import BASE_PRICES, UNIT_GROUPS
 import os
 
 load_dotenv()
@@ -47,7 +47,7 @@ def index():
                            selected_items=selected_items,
                            prices_real=prices_real,
                            prices=BASE_PRICES,
-                           units=units,
+                           units=UNIT_GROUPS,
                            all_products=all_products)
 
 
